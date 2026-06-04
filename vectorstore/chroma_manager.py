@@ -176,11 +176,14 @@ class ChromaManager:
 
 # ── Singleton for application-wide reuse ──
 _chroma_manager: Optional[ChromaManager] = None
+import threading
+_chroma_lock = threading.Lock()
 
 
 def get_chroma_manager() -> ChromaManager:
-    """Return a cached ChromaManager instance."""
+    """Return a cached ChromaManager instance (thread-safe)."""
     global _chroma_manager
-    if _chroma_manager is None:
-        _chroma_manager = ChromaManager()
+    with _chroma_lock:
+        if _chroma_manager is None:
+            _chroma_manager = ChromaManager()
     return _chroma_manager

@@ -7,7 +7,7 @@ import os
 from typing import Optional
 
 BACKEND_URL = os.getenv("BACKEND_URL", "http://localhost:8000")
-TIMEOUT = 60  # seconds
+TIMEOUT = 300  # seconds (increased to allow Render cold starts)
 
 
 def chat(message: str, session_id: str = "default") -> dict:
