@@ -14,9 +14,6 @@ httpx==0.27.0
 email-validator==2.1.1      # required by pydantic EmailStr (optional, not used currently)
 
 
-# PDF parsing
-pymupdf==1.23.8
-
 # GitHub
 requests==2.32.3
 
