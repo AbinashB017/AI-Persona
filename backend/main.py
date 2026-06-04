@@ -27,13 +27,6 @@ async def lifespan(app: FastAPI):
     logger.info(f"   Model   : {settings.groq_model}")
     logger.info(f"   ChromaDB: {settings.chroma_persist_dir}")
     logger.info(f"   Docs    : http://localhost:{settings.backend_port}/docs")
-    
-    # ── Trigger ChromaDB/PyTorch initialization in the background ──
-    # This prevents the first chat request from timing out while PyTorch loads
-    import threading
-    from vectorstore.chroma_manager import get_chroma_manager
-    threading.Thread(target=get_chroma_manager, daemon=True).start()
-    
     yield
     logger.info("Shutting down API.")
 

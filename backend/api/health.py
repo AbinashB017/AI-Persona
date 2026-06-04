@@ -11,28 +11,29 @@ from backend.core.config import get_settings
 router = APIRouter()
 
 
-from vectorstore.chroma_manager import _chroma_manager
-
 @router.get("/health")
 def health_check():
     settings = get_settings()
     
-    # Do NOT initialize chroma here, as it triggers a massive 5-minute PyTorch load
-    # which will cause Render's health check to timeout.
-    if _chroma_manager is not None:
+    docs = 0
+    sources = []
+    chroma_status = "lazy-loaded"
+    
+    # Fast path: Read directly from ChromaDB's underlying SQLite database
+    # This avoids initializing the massive PyTorch library just for a health check!
+    db_path = os.path.join(settings.chroma_persist_dir, "chroma.sqlite3")
+    if os.path.exists(db_path):
         try:
-            stats = _chroma_manager.get_collection_stats()
-            chroma_status = "ready"
-            docs = stats.get("total_documents", 0)
-            sources = stats.get("unique_sources", [])
+            import sqlite3
+            with sqlite3.connect(db_path) as conn:
+                docs = conn.execute("SELECT COUNT(*) FROM embeddings").fetchone()[0]
+                source_rows = conn.execute("SELECT DISTINCT string_value FROM embedding_metadata WHERE key='source'").fetchall()
+                sources = [row[0] for row in source_rows if row[0]]
+                chroma_status = "ready (fast-stats)"
         except Exception as e:
-            chroma_status = f"error: {e}"
-            docs = 0
-            sources = []
+            chroma_status = f"error reading sqlite: {e}"
     else:
-        chroma_status = "lazy-loaded (waiting for first query)"
-        docs = 0
-        sources = []
+        chroma_status = "database not found"
 
     return {
         "status": "ok",
