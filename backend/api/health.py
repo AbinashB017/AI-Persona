@@ -11,22 +11,34 @@ from backend.core.config import get_settings
 router = APIRouter()
 
 
+from vectorstore.chroma_manager import _chroma_manager
+
 @router.get("/health")
 def health_check():
     settings = get_settings()
-    try:
-        chroma = get_chroma_manager()
-        stats = chroma.get_collection_stats()
-        chroma_status = "ok"
-    except Exception as e:
-        stats = {}
-        chroma_status = f"error: {e}"
+    
+    # Do NOT initialize chroma here, as it triggers a massive 5-minute PyTorch load
+    # which will cause Render's health check to timeout.
+    if _chroma_manager is not None:
+        try:
+            stats = _chroma_manager.get_collection_stats()
+            chroma_status = "ready"
+            docs = stats.get("total_documents", 0)
+            sources = stats.get("unique_sources", [])
+        except Exception as e:
+            chroma_status = f"error: {e}"
+            docs = 0
+            sources = []
+    else:
+        chroma_status = "lazy-loaded (waiting for first query)"
+        docs = 0
+        sources = []
 
     return {
         "status": "ok",
         "persona": settings.persona_name,
         "model": settings.groq_model,
         "chromadb": chroma_status,
-        "documents_indexed": stats.get("total_documents", 0),
-        "sources": stats.get("unique_sources", []),
+        "documents_indexed": docs,
+        "sources": sources,
     }
