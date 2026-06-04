@@ -1,0 +1,15 @@
+.env
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+chroma_db/
+data/github_docs/
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+*.log
+call_me.py

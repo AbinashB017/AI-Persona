@@ -1,0 +1,27 @@
+# Phase 1 — RAG Pipeline dependencies only
+# Install with: pip install -r requirements-phase1.txt
+
+# Core
+python-dotenv==1.0.1
+loguru==0.7.2
+pydantic==2.7.3
+pydantic-settings==2.3.1
+
+# PDF parsing
+pymupdf==1.24.5
+
+# GitHub fetching
+requests==2.32.3
+
+# Embeddings
+sentence-transformers==3.0.1
+
+# Vector store
+chromadb==0.5.3
+
+# LangChain (chunking only)
+langchain==0.2.6
+langchain-community==0.2.6
+
+# Token counting
+tiktoken==0.7.0
