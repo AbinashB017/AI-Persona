@@ -15,7 +15,6 @@ os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 
 import chromadb
 from chromadb.config import Settings as ChromaSettings
-from sentence_transformers import SentenceTransformer
 from loguru import logger
 from typing import Optional
 
@@ -40,6 +39,7 @@ class ChromaManager:
 
         # ── Embedding model (loaded once, cached) ──
         logger.info(f"Loading embedding model: {self.embedding_model_name}")
+        from sentence_transformers import SentenceTransformer
         self.embed_model = SentenceTransformer(self.embedding_model_name)
 
         # ── ChromaDB persistent client ──
