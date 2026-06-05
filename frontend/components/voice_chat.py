@@ -163,6 +163,49 @@ const youText = document.getElementById("you-text");
 const aiText  = document.getElementById("ai-text");
 const stopBtn = document.getElementById("stop-btn");
 
+// ── Warm up Render backend on load ──
+let backendReady = false;
+statusEl.textContent = "⏳ Waking up backend...";
+micBtn.style.opacity = "0.5";
+
+async function warmUpBackend() {{
+  try {{
+    const resp = await fetch(BACKEND + "/health", {{ signal: AbortSignal.timeout(120000) }});
+    if (resp.ok) {{
+      backendReady = true;
+      micBtn.style.opacity = "1";
+      statusEl.textContent = "Click the mic and ask me anything";
+    }}
+  }} catch(e) {{
+    statusEl.textContent = "⏳ Backend is starting up... please wait";
+    setTimeout(warmUpBackend, 5000);
+  }}
+}}
+warmUpBackend();
+
+// ── Retry-enabled fetch for /chat ──
+async function fetchWithRetry(url, options, retries = 3) {{
+  for (let attempt = 1; attempt <= retries; attempt++) {{
+    try {{
+      const resp = await fetch(url, options);
+      if (resp.ok) return resp;
+      if (resp.status === 500 && attempt < retries) {{
+        statusEl.textContent = `⏳ Backend warming up... retry ${{attempt}}/${{retries}}`;
+        await new Promise(r => setTimeout(r, attempt * 10000));
+        continue;
+      }}
+      throw new Error("Backend returned " + resp.status);
+    }} catch(e) {{
+      if (attempt < retries && (e.message.includes("500") || e.message.includes("Failed to fetch"))) {{
+        statusEl.textContent = `⏳ Backend warming up... retry ${{attempt}}/${{retries}}`;
+        await new Promise(r => setTimeout(r, attempt * 10000));
+        continue;
+      }}
+      throw e;
+    }}
+  }}
+}}
+
 // ── Check browser support ──
 const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
 if (!SpeechRecognition) {{
@@ -183,6 +226,10 @@ if (SpeechRecognition) {{
 
 micBtn.addEventListener("click", () => {{
   if (!recognition) return;
+  if (!backendReady) {{
+    statusEl.textContent = "⏳ Still warming up backend... please wait a moment";
+    return;
+  }}
   stopSpeaking();
   recognition.start();
   micBtn.classList.add("listening");
@@ -201,16 +248,14 @@ recognition && (recognition.onresult = async (event) => {{
   aiBox.classList.remove("show");
 
   try {{
-    const response = await fetch(BACKEND + "/chat", {{
+    const response = await fetchWithRetry(BACKEND + "/chat", {{
       method: "POST",
       headers: {{"Content-Type": "application/json"}},
       body: JSON.stringify({{ message: transcript, session_id: SESSION_ID }})
-    }});
+    }}, 3);
 
-    if (!response.ok) throw new Error("Backend returned " + response.status);
     const data = await response.json();
     const rawAnswer = data.answer || "Sorry, I couldn't get an answer.";
-    // Strip out the Sources section so it isn't spoken aloud
     const answerForSpeech = rawAnswer.split(/Sources?:/i)[0];
 
     const answer = answerForSpeech
@@ -225,7 +270,7 @@ recognition && (recognition.onresult = async (event) => {{
 
     speakText(answer);
   }} catch (err) {{
-    statusEl.textContent = "❌ Error: " + err.message + " — Is FastAPI running on port 8000?";
+    statusEl.textContent = "❌ " + err.message + " — try again in a moment";
   }}
 }});
 

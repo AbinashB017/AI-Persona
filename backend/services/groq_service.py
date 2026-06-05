@@ -65,7 +65,7 @@ def book_meeting(name: str, email: str, date: str, time_slot: str, reason: str =
 tools = [check_availability, book_meeting]
 
 
-@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, min=2, max=10))
+@retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=2, min=5, max=60))
 def chat_completion(
     system_prompt: str,
     user_message: str,
