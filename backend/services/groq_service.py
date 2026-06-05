@@ -22,43 +22,38 @@ def check_availability(date: str) -> str:
     """
     Check Abinash's calendar availability for a specific date.
     Args:
-        date: String in YYYY-MM-DD format.
+        date: String in YYYY-MM-DD format (e.g. '2026-06-10').
     Returns:
-        JSON string of available slots or error.
+        JSON string of available time slots.
     """
-    logger.info(f"[Tool Mock] Checking availability for {date}")
-    # Hardcoded response for assignment reliability
-    res = {
-        "success": True,
-        "date": date,
-        "slots": ["10:00", "11:30", "14:00", "16:00"],
-        "count": 4
-    }
+    logger.info(f"[Tool] Checking real Cal.com availability for {date}")
+    res = get_available_slots(date=date, timezone="Asia/Kolkata")
     return json.dumps(res)
 
 
 @tool
 def book_meeting(name: str, email: str, date: str, time_slot: str, reason: str = "Interview") -> str:
     """
-    Book a confirmed meeting on Abinash's calendar.
+    Book a real confirmed meeting on Abinash's Cal.com calendar.
+    Sends a calendar invite and Cal Video link to the attendee's email.
     Args:
         name: Interviewer's full name.
         email: Interviewer's email address.
-        date: String in YYYY-MM-DD format.
-        time_slot: String in HH:MM format (24-hour).
+        date: String in YYYY-MM-DD format (e.g. '2026-06-10').
+        time_slot: String in HH:MM format 24-hour (e.g. '10:00').
         reason: Optional reason for the meeting.
     Returns:
-        JSON string with booking confirmation details or error.
+        JSON string with booking confirmation details including meeting URL.
     """
-    logger.info(f"[Tool Mock] Booking meeting for {name} on {date} at {time_slot}")
-    # Hardcoded response for assignment reliability
-    res = {
-        "success": True,
-        "booking_id": "mock-booking-999",
-        "meeting_url": "https://meet.google.com/mock-link-123",
-        "start_time": f"{date}T{time_slot}:00",
-        "message": f"✅ Booking confirmed! A calendar invite has been sent to {email} for {date} at {time_slot}."
-    }
+    logger.info(f"[Tool] Creating real Cal.com booking for {name} on {date} at {time_slot}")
+    res = create_booking(
+        name=name,
+        email=email,
+        date=date,
+        time_slot=time_slot,
+        reason=reason,
+        timezone="Asia/Kolkata",
+    )
     return json.dumps(res)
 
 
@@ -107,18 +102,23 @@ def chat_completion(
         return answer
 
     except Exception as e:
-        logger.error(f"[LLM] Agent Executor failed ({e}), falling back to simple LLM...")
-        
-        # Fallback to simple chat without tools if agent fails
-        from groq import Groq
-        client = Groq(api_key=settings.groq_api_key)
-        response = client.chat.completions.create(
-            model=settings.groq_model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        return response.choices[0].message.content
+        logger.error(f"[LLM] AgentExecutor failed: {e}. Retrying with direct LLM + tools...")
+        # Fallback: use ChatGroq directly but still bind tools so booking still works
+        try:
+            llm = ChatGroq(
+                api_key=settings.groq_api_key,
+                model_name=settings.groq_model,
+                temperature=temperature,
+                max_tokens=max_tokens,
+            )
+            llm_with_tools = llm.bind_tools(tools)
+            from langchain_core.messages import SystemMessage, HumanMessage
+            messages = [
+                SystemMessage(content=system_prompt),
+                HumanMessage(content=user_message),
+            ]
+            response = llm_with_tools.invoke(messages)
+            return response.content or "I'm sorry, I couldn't generate a response. Please try again."
+        except Exception as e2:
+            logger.error(f"[LLM] Fallback also failed: {e2}")
+            return "I'm experiencing technical difficulties. Please try again in a moment."
