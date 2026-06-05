@@ -3,7 +3,7 @@ backend/services/groq_service.py
 LLM Agent using LangChain (ChatGroq). Supports Tool Calling for Cal.com booking.
 Satisfies the "Framework: LangChain" and "book confirmed meeting without human intervention" requirements.
 """
-import sys, os, json
+import sys, os, json, threading, itertools
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from backend.core.config import get_settings
@@ -15,6 +15,35 @@ from langchain_groq import ChatGroq
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.tools import tool
 from langchain.agents import create_tool_calling_agent, AgentExecutor
+
+
+# ── Round-robin Groq API key manager ──
+class _KeyRotator:
+    """Thread-safe round-robin over all configured Groq API keys."""
+    def __init__(self):
+        self._lock = threading.Lock()
+        self._cycle = None  # built lazily on first use
+
+    def _build_cycle(self):
+        settings = get_settings()
+        keys = [k for k in [
+            settings.groq_api_key,
+            settings.groq_api_key_2,
+            settings.groq_api_key_3,
+        ] if k and k.strip()]
+        if not keys:
+            raise ValueError("No Groq API keys configured.")
+        logger.info(f"[KeyRotator] {len(keys)} Groq API key(s) loaded.")
+        self._cycle = itertools.cycle(keys)
+
+    def next_key(self) -> str:
+        with self._lock:
+            if self._cycle is None:
+                self._build_cycle()
+            return next(self._cycle)
+
+
+_key_rotator = _KeyRotator()
 
 
 @tool
@@ -69,14 +98,15 @@ def chat_completion(
 ) -> str:
     """
     Send a chat completion request via LangChain's Tool Calling Agent.
-    Allows the AI to autonomously use Calendar tools to book meetings.
+    Uses round-robin key rotation across all configured Groq API keys.
     """
     settings = get_settings()
-    logger.debug(f"[LLM] Agentic generation for: {user_message[:60]}...")
+    api_key = _key_rotator.next_key()
+    logger.debug(f"[LLM] Using key ...{api_key[-6:]} | query: {user_message[:60]}...")
 
     try:
         llm = ChatGroq(
-            api_key=settings.groq_api_key,
+            api_key=api_key,
             model_name=settings.groq_model,
             temperature=temperature,
             max_tokens=max_tokens,
@@ -90,8 +120,8 @@ def chat_completion(
 
         agent = create_tool_calling_agent(llm, tools, prompt)
         agent_executor = AgentExecutor(
-            agent=agent, 
-            tools=tools, 
+            agent=agent,
+            tools=tools,
             verbose=False,
             handle_parsing_errors=True,
             max_iterations=5
@@ -106,7 +136,7 @@ def chat_completion(
         # Fallback: use ChatGroq directly but still bind tools so booking still works
         try:
             llm = ChatGroq(
-                api_key=settings.groq_api_key,
+                api_key=_key_rotator.next_key(),  # rotate to next key for fallback too
                 model_name=settings.groq_model,
                 temperature=temperature,
                 max_tokens=max_tokens,

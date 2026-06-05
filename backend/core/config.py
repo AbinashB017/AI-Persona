@@ -20,6 +20,8 @@ class Settings(BaseSettings):
 
     # --- Groq ---
     groq_api_key: str
+    groq_api_key_2: Optional[str] = None
+    groq_api_key_3: Optional[str] = None
     groq_model: str = "llama-3.3-70b-versatile"
 
     # --- GitHub ---
