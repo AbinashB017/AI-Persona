@@ -55,7 +55,7 @@ def get_availability(date: str, timezone: str = "Asia/Kolkata") -> dict:
 
 
 def health() -> dict:
-    with httpx.Client(timeout=10) as client:
+    with httpx.Client(timeout=TIMEOUT) as client:
         resp = client.get(f"{BACKEND_URL}/health")
         resp.raise_for_status()
         return resp.json()

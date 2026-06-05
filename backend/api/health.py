@@ -5,7 +5,6 @@ import sys, os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from fastapi import APIRouter
-from vectorstore.chroma_manager import get_chroma_manager
 from backend.core.config import get_settings
 
 router = APIRouter()

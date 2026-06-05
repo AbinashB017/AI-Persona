@@ -14,6 +14,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 os.environ.setdefault("TF_ENABLE_ONEDNN_OPTS", "0")
 
 import chromadb
+import threading
 from chromadb.config import Settings as ChromaSettings
 from loguru import logger
 from typing import Optional
@@ -37,10 +38,19 @@ class ChromaManager:
         self.embedding_model_name = settings.embedding_model
         self.top_k = settings.rag_top_k
 
-        # ── Embedding model (loaded once, cached) ──
-        logger.info(f"Loading embedding model: {self.embedding_model_name}")
-        from sentence_transformers import SentenceTransformer
-        self.embed_model = SentenceTransformer(self.embedding_model_name)
+        # ── Embedding model (loaded once at first query) ──
+        # fastembed requires full model name e.g. "sentence-transformers/all-MiniLM-L6-v2"
+        # but .env stores the short name "all-MiniLM-L6-v2" for readability — map it here
+        FASTEMBED_NAME_MAP = {
+            "all-MiniLM-L6-v2": "sentence-transformers/all-MiniLM-L6-v2",
+            "all-mpnet-base-v2": "sentence-transformers/all-mpnet-base-v2",
+        }
+        fastembed_model_name = FASTEMBED_NAME_MAP.get(
+            self.embedding_model_name, self.embedding_model_name
+        )
+        logger.info(f"Loading embedding model via fastembed: {fastembed_model_name}")
+        from fastembed import TextEmbedding
+        self.embed_model = TextEmbedding(model_name=fastembed_model_name)
 
         # ── ChromaDB persistent client ──
         logger.info(f"Connecting to ChromaDB at: {self.persist_dir}")
@@ -60,8 +70,9 @@ class ChromaManager:
         )
 
     def embed_texts(self, texts: list[str]) -> list[list[float]]:
-        """Embed a list of texts using sentence-transformers."""
-        return self.embed_model.encode(texts, show_progress_bar=False).tolist()
+        """Embed a list of texts using fastembed (ONNX Runtime — no PyTorch)."""
+        # fastembed.embed() returns a generator of numpy arrays
+        return [emb.tolist() for emb in self.embed_model.embed(texts)]
 
     def add_documents(
         self,
@@ -176,7 +187,6 @@ class ChromaManager:
 
 # ── Singleton for application-wide reuse ──
 _chroma_manager: Optional[ChromaManager] = None
-import threading
 _chroma_lock = threading.Lock()
 
 
